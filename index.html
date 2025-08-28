@@ -1,1 +1,407 @@
-<!DOCTYPE html><html><body><h1>WFM Lite Placeholder</h1></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WFM Lite — Genesys Cloud WFM Approximation</title>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#111827; --panel:#1f2937; --accent:#38bdf8;
+    --text:#f8fafc; --muted:#94a3b8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --card:#0b1220;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+  header{padding:16px 20px;background:linear-gradient(90deg,var(--bg2),#0f2035);border-bottom:1px solid #0b2745;position:sticky;top:0;z-index:5}
+  h1{margin:0;font-size:20px;letter-spacing:.5px}
+  main{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px}
+  .panel{background:var(--panel);border:1px solid #243447;border-radius:10px;padding:14px}
+  .panel h2{margin:0 0 8px 0;font-size:16px;color:var(--accent)}
+  label{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px}
+  input[type="number"], input[type="text"], select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--text)}
+  input[type="file"]{width:100%;}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .btn{background:#0b2745;color:#dbeafe;border:1px solid #1d4ed8;border-radius:8px;padding:8px 12px;cursor:pointer}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.secondary{border-color:#334155;color:#e5e7eb}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .kpi{background:var(--card);border:1px solid #1e293b;padding:10px;border-radius:10px}
+  .kpi h3{margin:0;font-size:12px;color:var(--muted);font-weight:500}
+  .kpi .num{font-size:20px;margin-top:6px}
+  canvas{width:100%;height:260px;background:#0a0f1e;border:1px solid #1d283a;border-radius:10px}
+  table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #1d283a;border-radius:10px;overflow:hidden;background:var(--card)}
+  th,td{padding:8px 10px;border-bottom:1px solid #1d283a;font-size:12px}
+  th{background:#0f1b2f;text-align:left;color:#e2e8f0;position:sticky;top:0;z-index:2}
+  tbody tr:nth-child(even){background:#0d1526}
+  .note{font-size:12px;color:#9ca3af}
+  .pill{border:1px solid #334155;border-radius:999px;padding:2px 8px;font-size:11px;color:#cbd5e1}
+  details{border:1px solid #25364f;border-radius:10px;padding:10px;margin:10px 0;background:#0c1525}
+  summary{cursor:pointer;color:var(--accent);font-weight:600}
+  .status{font-size:12px}
+  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.bad{color:var(--bad)}
+  footer{padding:8px 16px;color:#94a3b8;border-top:1px solid #0b2745;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>WFM Lite — Genesys Cloud WFM Approximation</h1>
+  <div class="note">Single-page calculator for forecast → staffing → schedule → intraday monitoring (no server, no dependencies)</div>
+</header>
+<main>
+  <section class="panel">
+    <h2>Inputs</h2>
+    <div class="row">
+      <div><label>Interval length (minutes)</label><input id="intervalMins" type="number" value="15" min="5" step="5"/></div>
+      <div><label>Forecast horizon (days)</label><input id="horizonDays" type="number" value="14" min="1" max="60"/></div>
+    </div>
+    <div class="row">
+      <div><label>Service level target (%)</label><input id="slaPct" type="number" value="80" min="0" max="100"/></div>
+      <div><label>SLA threshold (seconds)</label><input id="slaSec" type="number" value="20" min="1" /></div>
+    </div>
+    <div class="row">
+      <div><label>Average handle time, AHT (seconds)</label><input id="ahtSec" type="number" value="420" min="1"/></div>
+      <div><label>Concurrency (1=voice, 2–4 typical chat)</label><input id="concurrency" type="number" value="1" min="1" max="8"/></div>
+    </div>
+    <div class="row">
+      <div><label>Shrinkage (%)</label><input id="shrinkagePct" type="number" value="20" min="0" max="80"/></div>
+      <div><label>Max occupancy (%)</label><input id="maxOccPct" type="number" value="85" min="10" max="100"/></div>
+    </div>
+    <details>
+      <summary>Forecast options</summary>
+      <div class="row">
+        <div>
+          <label>Method</label>
+          <select id="fcMethod">
+            <option value="avg">Simple average</option>
+            <option value="ses" selected>Single exponential smoothing</option>
+          </select>
+        </div>
+        <div>
+          <label>Alpha (SES)</label>
+          <input id="alpha" type="number" value="0.3" min="0.01" max="0.95" step="0.01"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Seasonality adjustment</label>
+          <select id="seasonality">
+            <option value="none">None</option>
+            <option value="dow" selected>Day-of-week</option>
+          </select>
+        </div>
+        <div>
+          <label>Historical smoothing (days)</label>
+          <input id="histDays" type="number" value="21" min="7" max="90"/>
+        </div>
+      </div>
+    </details>
+    <label>Upload historical CSV (optional) — columns: <span style="font-family:monospace">timestamp, contacts[, aht_seconds]</span></label>
+    <input id="histCsv" type="file" accept=".csv"/>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" id="btnDemo">Use demo data</button>
+      <button class="btn secondary" id="btnClear">Clear data</button>
+    </div>
+    <hr style="border-color:#1d283a;margin:12px 0"/>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="btnForecast">1) Run forecast</button>
+      <button class="btn" id="btnStaff">2) Compute staffing</button>
+      <button class="btn" id="btnSchedule">3) Build schedule</button>
+    </div>
+    <div class="note" style="margin-top:8px">Tip: Steps run left→right. You can re-run any step after tweaking inputs.</div>
+
+    <h2 style="margin-top:18px">Intraday monitoring</h2>
+    <label>Upload intraday actuals CSV — columns: <span style="font-family:monospace">timestamp, contacts</span></label>
+    <input id="actualCsv" type="file" accept=".csv"/>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <button class="btn" id="btnReforecast">Reforecast from intraday actuals</button>
+      <span class="pill">Monitors variance & coverage</span>
+    </div>
+    <details>
+      <summary>Shift templates (edit if needed)</summary>
+      <div class="note">One per line: <span style="font-family:monospace">name,startHH:MM,durationMin,daysOfWeek(0-6 e.g. 1|2|3|4|5)</span></div>
+      <textarea id="shiftTemplates" style="width:100%;height:120px;background:#0b1220;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:8px"></textarea>
+    </details>
+    <details>
+      <summary>Save / Load config</summary>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn secondary" id="btnSaveCfg">Save to browser</button>
+        <button class="btn secondary" id="btnLoadCfg">Load from browser</button>
+        <button class="btn secondary" id="btnExportCsv">Export results CSV</button>
+        <button class="btn secondary" id="btnExportSchedule">Export schedule CSV</button>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>Results</h2>
+    <div class="kpis" id="kpis">
+      <div class="kpi"><h3>Peak required (agents)</h3><div class="num" id="kpiPeak">—</div></div>
+      <div class="kpi"><h3>Avg required (agents)</h3><div class="num" id="kpiAvg">—</div></div>
+      <div class="kpi"><h3>Total staff hours (sched)</h3><div class="num" id="kpiHours">—</div></div>
+      <div class="kpi"><h3>SLA @ peak</h3><div class="num" id="kpiSla">—</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div>
+        <h3 class="note" style="margin:6px 0 4px">Volume & forecast</h3>
+        <canvas id="chartVol"></canvas>
+      </div>
+      <div>
+        <h3 class="note" style="margin:6px 0 4px">Required vs scheduled</h3>
+        <canvas id="chartFte"></canvas>
+      </div>
+    </div>
+
+    <details open>
+      <summary>Interval detail</summary>
+      <div style="max-height:420px;overflow:auto;border-radius:10px;border:1px solid #1d283a">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Forecast contacts</th>
+              <th>AHT (s)</th>
+              <th>Required agents</th>
+              <th>Scheduled agents</th>
+              <th>Gap</th>
+              <th>Occupancy %</th>
+              <th>Svc Lvl %</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </details>
+    <div class="status" id="status"></div>
+  </section>
+</main>
+<footer>
+  <div>WFM Lite © 2025. This tool approximates common WFM methods (Erlang C, SES). It is not affiliated with Genesys.</div>
+</footer>
+
+<script>
+(function(){
+  const $ = s=>document.querySelector(s);
+  const fmt = n => (Math.round(n*100)/100).toLocaleString();
+  const parseCSV = async (file) => (await file.text()).trim().split(/\\r?\\n/).map(r=>r.split(',').map(x=>x.trim()));
+  const toCSV = rows => rows.map(r=>r.map(x=>x==null?'':String(x)).join(',')).join('\\n');
+
+  const defaultShiftText = ["Weekday-08x9,08:00,540,1|2|3|4|5","Weekday-10x9,10:00,540,1|2|3|4|5","Saturday-08x4,08:00,240,6"].join("\\n");
+
+  let hist=[], fc=[], sched=[]; let intervalSecs=15*60;
+  $('#shiftTemplates').value = defaultShiftText;
+
+  function genDemoData(days=21, intervalMins=15){
+    const out=[]; const now=new Date(); const start=new Date(now.getTime()-days*24*3600*1000);
+    start.setMinutes(0,0,0); start.setHours(8); const end=new Date(now.getTime()); const step=intervalMins*60*1000;
+    for(let t=start.getTime(); t<end.getTime(); t+=step){
+      const dt=new Date(t); const dow=dt.getDay(); const h=dt.getHours()+dt.getMinutes()/60;
+      let open=false; if (dow>=1&&dow<=5) open=(h>=8&&h<17); if (dow===6) open=(h>=8&&h<12); if(!open) continue;
+      const peak=(dow>=1&&dow<=5)?140:60, base=(dow>=1&&dow<=5)?20:10;
+      const x=(h-8)/9; const shape=Math.exp(-Math.pow((x-0.5)/0.28,2));
+      const contacts=Math.max(0, Math.round(base + peak*shape + (Math.random()*8-4)));
+      out.push({ts:new Date(t), contacts, aht:420 + Math.round(Math.random()*60-30)});
+    }
+    return out;
+  }
+
+  function erlangCProbWait(agents, a){
+    if (agents<=a) return 1;
+    let sum=0, term=1;
+    for(let k=0;k<agents;k++){ if(k>0) term*=a/k; sum+=term; }
+    const aPowN_overNfact = term * (a/agents);
+    const top = aPowN_overNfact * (agents/(agents-a));
+    const p0 = sum + top;
+    return top/p0;
+  }
+  function serviceLevel(agents,a,t,aht){ if(agents<=a) return 0; const Pw=erlangCProbWait(agents,a); return 1 - Pw*Math.exp(-(agents-a)*(t/aht)); }
+  function requiredAgents(contacts, aht, intervalSec, slaTarget, slaSec, maxOccPct, concurrency){
+    const effAht=aht/Math.max(1,concurrency); const a=(contacts*effAht)/intervalSec; let n=Math.max(1,Math.ceil(a));
+    const target=slaTarget/100, occMax=maxOccPct/100;
+    for(let i=0;i<400;i++){ const occ=a/n; const sl=serviceLevel(n,a,slaSec,effAht); if(sl>=target && occ<=occMax) break; n++; }
+    return {agents:n, a, effAht};
+  }
+
+  function forecast(hist, intervalSec, horizonDays, method, alpha, seasonality){
+    if(!hist.length) throw new Error("No historical data loaded.");
+    hist=hist.slice().sort((a,b)=>a.ts-b.ts); const step=intervalSec*1000;
+    const series=new Map();
+    for(const r of hist){ const d=new Date(r.ts); const key=d.getDay()+"|"+((d.getHours()*3600+d.getMinutes()*60)/intervalSec); (series.get(key)||series.set(key,[])).get(key); if(!series.has(key)) series.set(key,[]); series.get(key).push(r.contacts); }
+    const dowMul=new Array(7).fill(1);
+    if(seasonality==="dow"){ const totals=new Array(7).fill(0), counts=new Array(7).fill(0);
+      hist.forEach(r=>{ const d=new Date(r.ts).getDay(); totals[d]+=r.contacts; counts[d]++; });
+      const grand=totals.reduce((a,b)=>a+b,0)/Math.max(1,counts.reduce((a,b)=>a+b,0));
+      for(let d=0; d<7; d++){ const avg=counts[d]? totals[d]/counts[d] : 1; dowMul[d]=avg? (avg/grand):1; }
+    }
+    const lastTs=hist[hist.length-1].ts; const endTs=new Date(lastTs.getTime()+horizonDays*24*3600*1000);
+    const allSlots=new Map(); for(let t=lastTs.getTime()+step; t<=endTs.getTime(); t+=step){ const d=new Date(t); const key=d.getDay()+"|"+((d.getHours()*3600+d.getMinutes()*60)/intervalSec); allSlots.set(t,key); }
+    const slotState=new Map();
+    for(const [key,arr] of series){ let s=arr[0]||0; if(method==="avg"){ s=arr.reduce((a,b)=>a+b,0)/arr.length; } else { for(let i=1;i<arr.length;i++){ s = Number(alpha)*arr[i] + (1-Number(alpha))*s; } } slotState.set(key,s); }
+    const out=[]; for(const [t,key] of allSlots){ const dow=parseInt(key.split("|")[0],10); const base=slotState.get(key)||0; const mul=seasonality==="dow"? dowMul[dow]:1; out.push({ts:new Date(t), contacts: Math.max(0, base*mul)}); }
+    return out;
+  }
+
+  function drawSeries(canvas, series){
+    const ctx=canvas.getContext('2d'); const W=canvas.width=canvas.clientWidth; const H=canvas.height=canvas.clientHeight;
+    ctx.clearRect(0,0,W,H); const pad=24; const xs=series.map(s=>s.x).flat(); const ys=series.map(s=>s.y).flat();
+    const minX=Math.min(...xs), maxX=Math.max(...xs); const minY=0, maxY=Math.max(1,Math.max(...ys));
+    const x2=px=> pad+( (px-minX)/(maxX-minX||1) )*(W-2*pad); const y2=py=> H-pad - ( (py-minY)/(maxY-minY||1) )*(H-2*pad);
+    ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; for(let i=0;i<5;i++){ let y=pad+i*(H-2*pad)/4; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-pad,y); ctx.stroke(); }
+    ctx.strokeStyle='#334155'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+    const colors=['#60a5fa','#34d399','#fbbf24','#f472b6'];
+    series.forEach((s,idx)=>{ ctx.strokeStyle=colors[idx%colors.length]; ctx.lineWidth=1.8; ctx.beginPath();
+      s.y.forEach((yy,i)=>{ const xp=x2(s.x[i]), yp=y2(yy); if(i===0) ctx.moveTo(xp,yp); else ctx.lineTo(xp,yp); }); ctx.stroke(); });
+  }
+
+  function parseTemplates(text){
+    return text.split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
+      const [name,start,dur,days]=line.split(',').map(s=>s.trim());
+      const [h,m]=start.split(':').map(x=>parseInt(x,10)); const mins=parseInt(dur,10);
+      const dow=(days||"").split('|').map(x=>parseInt(x,10)).filter(x=>!isNaN(x)); return {name, startMin:h*60+m, durationMin:mins, days:dow};
+    });
+  }
+
+  function buildSchedule(required, intervalMins, templates){
+    const byDay=new Map();
+    for(const r of required){ const d=new Date(r.ts); const key=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+      const minOfDay=d.getHours()*60+d.getMinutes(); if(!byDay.has(key)) byDay.set(key,{date:new Date(d.getFullYear(),d.getMonth(),d.getDate()), slots:[]});
+      byDay.get(key).slots.push({minOfDay, ts:r.ts, req:r.req, sched:0});
+    }
+    const shifts=[];
+    for(const [key,day] of byDay){ day.slots.sort((a,b)=>a.minOfDay-b.minOfDay);
+      let limit=2000;
+      while(limit-- > 0){
+        let worstIdx=-1, worstGap=0; for(let i=0;i<day.slots.length;i++){ const gap=day.slots[i].req-day.slots[i].sched; if(gap>worstGap){ worstGap=gap; worstIdx=i; } }
+        if(worstGap<=0) break;
+        const slot=day.slots[worstIdx]; const dow=day.date.getDay(); let bestTpl=null, bestGain=-1;
+        for(const tpl of templates){ if(!tpl.days.includes(dow)) continue; const start=tpl.startMin, end=tpl.startMin+tpl.durationMin; if(slot.minOfDay<start || slot.minOfDay>=end) continue;
+          let gain=0; for(const s of day.slots){ if(s.minOfDay>=start && s.minOfDay<end){ gain += Math.max(0, s.req - s.sched); } } if(gain>bestGain){ bestGain=gain; bestTpl=tpl; } }
+        if(!bestTpl){ day.slots[worstIdx].sched += 1; continue; }
+        shifts.push({date:day.date, name:bestTpl.name, startMin:bestTpl.startMin, endMin:bestTpl.startMin+bestTpl.durationMin});
+        for(const s of day.slots){ if(s.minOfDay>=bestTpl.startMin && s.minOfDay<bestTpl.startMin+bestTpl.durationMin){ s.sched += 1; } }
+      }
+    }
+    const scheduledMap=new Map(Array.from(byDay.values()).flatMap(d=> d.slots.map(s=>[s.ts, s.sched])));
+    return {shifts, scheduledMap};
+  }
+
+  function renderTable(rows){
+    const tb=$('#tbody'); tb.innerHTML=''; const frag=document.createDocumentFragment();
+    rows.forEach(r=>{ const tr=document.createElement('tr'); const dt=new Date(r.ts);
+      const occ=r.req>0 ? ((r.a/(r.req||1))*100):0;
+      [dt.toISOString().slice(0,16).replace('T',' '), Math.round(r.contacts), Math.round(r.aht||Number($('#ahtSec').value)), r.req??'—', r.sched??'—', (r.gap??0), isFinite(occ)?Math.round(occ):0, r.slPct!=null? Math.round(r.slPct*1000)/10 : '—'].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+      frag.appendChild(tr);
+    });
+    tb.appendChild(frag);
+  }
+
+  function renderKPIs(rows, shifts){
+    if(!rows.length){ ['kpiPeak','kpiAvg','kpiHours','kpiSla'].forEach(id=>$('#'+id).textContent='—'); return; }
+    const peak=Math.max(...rows.map(r=>r.req||0)); const avg=rows.reduce((a,b)=>a+(b.req||0),0)/rows.length;
+    const hours=(shifts||[]).reduce((sum,s)=> sum + (s.endMin-s.startMin)/60, 0);
+    const peakRow=rows.reduce((best,r)=> (r.req||0)>(best.req||0)?r:best, rows[0]);
+    $('#kpiPeak').textContent=fmt(peak); $('#kpiAvg').textContent=fmt(avg); $('#kpiHours').textContent=fmt(hours); $('#kpiSla').textContent= (peakRow.slPct!=null)? (Math.round(peakRow.slPct*1000)/10)+'%' : '—';
+  }
+
+  function drawAll(rows){
+    if(!rows.length) return;
+    const xs=rows.map(r=>new Date(r.ts).getTime());
+    const vol=rows.map(r=>r.contacts); const req=rows.map(r=>r.req||0); const sch=rows.map(r=>r.sched||0);
+    drawSeries(document.getElementById('chartVol'), [{x:xs,y:vol}]);
+    drawSeries(document.getElementById('chartFte'), [{x:xs,y:req},{x:xs,y:sch}]);
+  }
+
+  function exportResults(rows){
+    const hdr=['timestamp','forecast_contacts','aht_secs','required_agents','scheduled_agents','gap','occupancy_pct','service_level_pct'];
+    const data=rows.map(r=>[ new Date(r.ts).toISOString(), Math.round(r.contacts), Math.round(r.aht||Number($('#ahtSec').value)), r.req??'', r.sched??'', r.gap??'', r.req? Math.round((r.a/(r.req||1))*100):'', r.slPct!=null? Math.round(r.slPct*1000)/10:'' ]);
+    const csv=toCSV([hdr,...data]); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='wfm_results.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+  function exportSchedule(shifts){
+    const hdr=['date','name','start','end','duration_min'];
+    const data=(shifts||[]).map(s=>[ s.date.toISOString().slice(0,10), s.name, String(Math.floor(s.startMin/60)).padStart(2,'0')+':'+String(s.startMin%60).padStart(2,'0'), String(Math.floor(s.endMin/60)).padStart(2,'0')+':'+String(s.endMin%60).padStart(2,'0'), s.endMin-s.startMin ]);
+    const csv=toCSV([hdr,...data]); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='wfm_schedule.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+
+  // Handlers
+  document.getElementById('btnDemo').onclick=()=>{ const mins=parseInt($('#intervalMins').value,10); hist=genDemoData(parseInt($('#histDays').value,10), mins); $('#status').textContent=`Loaded ${hist.length} demo intervals.`; };
+  document.getElementById('btnClear').onclick=()=>{ hist=[]; fc=[]; sched=[]; $('#status').textContent='Cleared.'; renderTable([]); drawAll([]); renderKPIs([],[]); };
+
+  document.getElementById('histCsv').addEventListener('change', async (e)=>{
+    const f=e.target.files[0]; if(!f) return; const rows=await parseCSV(f); let start=0; if(rows[0][0].toLowerCase().includes('timestamp')) start=1;
+    hist=[]; for(let i=start;i<rows.length;i++){ const [ts,contacts,aht]=rows[i]; const d=new Date(ts); if(!isFinite(d.getTime())) continue; const c=Number(contacts); const a=aht!=null&&aht!==''? Number(aht):undefined; hist.push({ts:d, contacts:c, aht:a}); }
+    $('#status').textContent=`Loaded ${hist.length} historical rows.`;
+  });
+
+  document.getElementById('btnForecast').onclick=()=>{
+    try{
+      const intervalMins=parseInt($('#intervalMins').value,10); intervalSecs=intervalMins*60;
+      const method=$('#fcMethod').value; const alpha=Number($('#alpha').value); const seasonality=$('#seasonality').value;
+      const horizon=parseInt($('#horizonDays').value,10); const ahtDefault=Number($('#ahtSec').value)||420;
+      const out=forecast(hist.length?hist:genDemoData(parseInt($('#histDays').value,10), intervalMins), intervalSecs, horizon, method, alpha, seasonality);
+      const ahtHist=hist.map(h=>h.aht).filter(x=>isFinite(x)); const median=ahtHist.sort((a,b)=>a-b)[Math.floor(ahtHist.length/2)] || ahtDefault;
+      fc=out.map(r=>({ts:r.ts, contacts:r.contacts, aht:median}));
+      renderTable(fc); drawAll(fc); renderKPIs(fc,[]); $('#status').textContent=`Forecast complete: ${fc.length} intervals, median AHT ${median}s.`;
+    }catch(err){ $('#status').textContent='Forecast error: '+err.message; }
+  };
+
+  document.getElementById('btnStaff').onclick=()=>{
+    if(!fc.length){ $('#status').textContent='Run forecast first.'; return; }
+    const slaTarget=Number($('#slaPct').value), slaSec=Number($('#slaSec').value), aht=Number($('#ahtSec').value);
+    const shrink=Number($('#shrinkagePct').value)/100, occMax=Number($('#maxOccPct').value), conc=Number($('#concurrency').value);
+    const rows=[];
+    for(const r of fc){ const res=requiredAgents(r.contacts, aht, intervalSecs, slaTarget, slaSec, occMax, conc); const sl=serviceLevel(res.agents, res.a, slaSec, res.effAht); const req=Math.ceil(res.agents/(1-shrink)); rows.push({...r, a:res.a, req, slPct:sl}); }
+    fc=rows; renderTable(fc); drawAll(fc); renderKPIs(fc,[]); $('#status').textContent='Staffing computed (Erlang C with shrinkage).';
+  };
+
+  document.getElementById('btnSchedule').onclick=()=>{
+    if(!fc.length){ $('#status').textContent='Compute staffing first.'; return; }
+    if(fc.some(r=>!isFinite(r.req))){ $('#status').textContent='Staffing not computed yet.'; return; }
+    const intervalMins=parseInt($('#intervalMins').value,10); const templates=parseTemplates($('#shiftTemplates').value||defaultShiftText);
+    const required=fc.map(r=>({ts:r.ts, req:r.req})); const {shifts, scheduledMap}=buildSchedule(required, intervalMins, templates); sched=shifts;
+    fc=fc.map(r=>{ const s=scheduledMap.get(r.ts)||0; return {...r, sched:s, gap: Math.round((r.req||0)-s)}; });
+    renderTable(fc); drawAll(fc); renderKPIs(fc, shifts); $('#status').textContent=`Schedule built: ${shifts.length} shifts.`;
+  };
+
+  document.getElementById('actualCsv').addEventListener('change', async (e)=>{
+    const f=e.target.files[0]; if(!f) return; const rows=await parseCSV(f); let start=0; if(rows[0][0].toLowerCase().includes('timestamp')) start=1;
+    const actual=new Map(); for(let i=start;i<rows.length;i++){ const [ts,contacts]=rows[i]; const d=new Date(ts); if(!isFinite(d.getTime())) continue; actual.set(d.toISOString().slice(0,16), Number(contacts)); }
+    fc = fc.map(r=>{ const key=new Date(r.ts).toISOString().slice(0,16); return {...r, actual:actual.get(key)}; });
+    $('#status').textContent=`Loaded ${actual.size} intraday actual intervals.`;
+  });
+
+  document.getElementById('btnReforecast').onclick=()=>{
+    if(!fc.length){ $('#status').textContent='Run forecast first.'; return; }
+    const aht=Number($('#ahtSec').value), slaTarget=Number($('#slaPct').value), slaSec=Number($('#slaSec').value);
+    const shrink=Number($('#shrinkagePct').value)/100, occMax=Number($('#maxOccPct').value), conc=Number($('#concurrency').value);
+    let pivotIdx=-1; for(let i=0;i<fc.length;i++){ if(isFinite(fc[i].actual)) pivotIdx=i; }
+    if(pivotIdx<0){ $('#status').textContent='No intraday actuals loaded.'; return; }
+    const factor=(fc.slice(0,pivotIdx+1).reduce((a,b)=>a+(b.actual||0),0)+1e-6)/(fc.slice(0,pivotIdx+1).reduce((a,b)=>a+(b.contacts||0),0)+1e-6);
+    const rows=[]; for(let i=0;i<fc.length;i++){ let contacts=fc[i].contacts; if(i>pivotIdx){ contacts*=factor; } const res=requiredAgents(contacts, aht, intervalSecs, slaTarget, slaSec, occMax, conc);
+      const sl=serviceLevel(res.agents, res.a, slaSec, res.effAht); const req=Math.ceil(res.agents/(1-shrink)); rows.push({...fc[i], contacts, req, slPct:sl}); }
+    fc=rows; renderTable(fc); drawAll(fc); renderKPIs(fc, sched); $('#status').textContent=`Reforecast applied (factor ${factor.toFixed(3)}).`;
+  };
+
+  document.getElementById('btnSaveCfg').onclick=()=>{
+    const cfg={ intervalMins:+$('#intervalMins').value, horizonDays:+$('#horizonDays').value, slaPct:+$('#slaPct').value, slaSec:+$('#slaSec').value,
+      ahtSec:+$('#ahtSec').value, concurrency:+$('#concurrency').value, shrinkagePct:+$('#shrinkagePct').value, maxOccPct:+$('#maxOccPct').value,
+      fcMethod:$('#fcMethod').value, alpha:+$('#alpha').value, seasonality:$('#seasonality').value, histDays:+$('#histDays').value, shiftTemplates:$('#shiftTemplates').value };
+    localStorage.setItem('wfmLiteCfg', JSON.stringify(cfg)); $('#status').textContent='Configuration saved to this browser.';
+  };
+  document.getElementById('btnLoadCfg').onclick=()=>{
+    const raw=localStorage.getItem('wfmLiteCfg'); if(!raw){ $('#status').textContent='No saved config in this browser.'; return; }
+    try{ const c=JSON.parse(raw);
+      $('#intervalMins').value=c.intervalMins; $('#horizonDays').value=c.horizonDays; $('#slaPct').value=c.slaPct; $('#slaSec').value=c.slaSec;
+      $('#ahtSec').value=c.ahtSec; $('#concurrency').value=c.concurrency; $('#shrinkagePct').value=c.shrinkagePct; $('#maxOccPct').value=c.maxOccPct;
+      $('#fcMethod').value=c.fcMethod; $('#alpha').value=c.alpha; $('#seasonality').value=c.seasonality; $('#histDays').value=c.histDays; $('#shiftTemplates').value=c.shiftTemplates;
+      $('#status').textContent='Loaded saved configuration.';
+    }catch(e){ $('#status').textContent='Load error: '+e.message; }
+  };
+
+  document.getElementById('btnExportCsv').onclick=()=>exportResults(fc);
+  document.getElementById('btnExportSchedule').onclick=()=>exportSchedule(sched);
+
+  // Initialize
+  document.getElementById('btnDemo').click();
+  document.getElementById('btnForecast').click();
+})();
+</script>
+</body>
+</html>
