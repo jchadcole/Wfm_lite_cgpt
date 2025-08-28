@@ -224,7 +224,14 @@
     if(!hist.length) throw new Error("No historical data loaded.");
     hist=hist.slice().sort((a,b)=>a.ts-b.ts); const step=intervalSec*1000;
     const series=new Map();
-    for(const r of hist){ const d=new Date(r.ts); const key=d.getDay()+"|"+((d.getHours()*3600+d.getMinutes()*60)/intervalSec); (series.get(key)||series.set(key,[])).get(key); if(!series.has(key)) series.set(key,[]); series.get(key).push(r.contacts); }
+    
+for (const r of hist) {
+  const d = new Date(r.ts);
+  const key = d.getDay() + "|" + ((d.getHours()*3600 + d.getMinutes()*60) / intervalSec);
+  if (!series.has(key)) series.set(key, []);
+  series.get(key).push(r.contacts);
+}
+
     const dowMul=new Array(7).fill(1);
     if(seasonality==="dow"){ const totals=new Array(7).fill(0), counts=new Array(7).fill(0);
       hist.forEach(r=>{ const d=new Date(r.ts).getDay(); totals[d]+=r.contacts; counts[d]++; });
